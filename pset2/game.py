@@ -197,7 +197,7 @@ class Game:
             seq: idx for idx, seq in enumerate(seqs)
         } for seqs in self.all_seqs]
 
-    def behav_to_seq(self, player: str, behav_strat: str):
+    def behav_to_seq(self, player: str, behav_strat: dict):
         """
         Convert behavioral strat to sequential strat.
 
@@ -226,7 +226,7 @@ class Game:
         res[None] = 1
         return res
 
-    def is_seq_strat(self, strat):
+    def is_seq_strat(self, player: str, seq_strat: dict):
         """
         Verify that a strategy is indeed sequential, i.e. that
             x[None] == 1 and
@@ -234,7 +234,21 @@ class Game:
             i.e. that at every decision (infoset) node, sum of entires of children
                 equals entry at parent of node.
         """
-        assert strat[None] == 1
+        assert seq_strat[None] == 1
+        
+        for info_hist, info_node in self.infosets.items():
+            if info_node["player"] != player:
+                continue
+            
+            actions = info_node["actions"]
+            v1 = sum([
+                seq_strat[(info_hist, action)] \
+                for action in actions
+            ])
+            v2 = seq_strat[self.par_seq[(info_hist, actions[0])]]
+            assert np.isclose(v1, v2)
+
+        return True
 
     def gen_uniform_behav_strat(self, player: str):
         """
@@ -362,6 +376,12 @@ class Game:
 if __name__ == "__main__":
     game = Game("./efgs/kuhn.txt")
 
-    uniform_2 = game.gen_uniform_behav_strat("2")
-    br_1 = game.get_best_response("1", uniform_2)
-    pprint(br_1)
+    # Uniform strategy for P2
+    u2 = game.gen_uniform_behav_strat("2")
+
+    # Best response to U2 for P1
+    br1 = game.get_best_response("1", u2)
+    pprint(br1)
+
+    u2_seq = game.behav_to_seq("2", u2)
+    print(game.is_seq_strat("2", u2_seq))
