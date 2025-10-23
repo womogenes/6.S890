@@ -150,7 +150,7 @@ class Game:
         """
         # Enumerate all sequences by player
         # Deterministic, ordered, etc
-        all_seqs = [set() for _ in range(self.n_players)]
+        all_seqs = {player: set() for player in self.players}
 
         # Stores (hist, (most_recent_seqs))
         stack = [("/", (None,) * self.n_players)]
@@ -183,7 +183,7 @@ class Game:
             for action, child_hist in children:
                 # Mark parent sequence
                 seq = (node["infoset"], action)
-                all_seqs[player_idx].add(seq)
+                all_seqs[player].add(seq)
                 par_seq[seq] = last_seqs[player_idx]
 
                 # DFS
@@ -192,27 +192,67 @@ class Game:
                 stack.append((child_hist, tuple(new_last_seqs)))
         
         self.par_seq = par_seq
-        self.all_seqs = [sorted(seqs) for seqs in all_seqs]
+        self.all_seqs = {player: sorted(seqs) for player, seqs in all_seqs.items()}
         self.seq2idx = [{
             seq: idx for idx, seq in enumerate(seqs)
         } for seqs in self.all_seqs]
 
-    def gen_uniform_strat(self, player: str):
+    def behav_to_seq(self, player: str, behav_strat: str):
+        """
+        Convert behavioral strat to sequential strat.
+
+        behav_strat:
+            key: infoset
+            value: dict
+                key: action
+                value: probability
+        """
+        # We're being lazy screw it
+
+        @lru_cache(None)
+        def get_seq_prob(seq):
+            """
+            Convert probability described in behav_strat to sequential form.
+            i.e. multiply everything by parent probability.
+            """
+            if seq == None:
+                return 1
+            return behav_strat[seq] * get_seq_prob(self.par_seq[seq])
+
+        res = {
+            seq: get_seq_prob(seq)
+            for seq in self.all_seqs[player]
+        }
+        res[None] = 1
+        return res
+
+    def is_seq_strat(self, strat):
+        """
+        Verify that a strategy is indeed sequential, i.e. that
+            x[None] == 1 and
+            sum_(a in A_j) x[ja] == x_(p_j), for all j in J.
+            i.e. that at every decision (infoset) node, sum of entires of children
+                equals entry at parent of node.
+        """
+        assert strat[None] == 1
+
+    def gen_uniform_behav_strat(self, player: str):
         """
         Given player string, e.g. '1' or '2', generate uniform strategy
         Strategy is represented in behavioral form (oops)
         """
         strat = {}
         infoset_hists = [
-            hist for hist, infoset in self.infosets.items() if infoset["player"] == player
-        ]
+            hist for hist, infoset in self.infosets.items() if infoset["player"] == player]
 
         for infoset_hist in infoset_hists:
             infoset = self.infosets[infoset_hist]
             if infoset["player"] != player:
                 continue
             actions = infoset["actions"]
-            strat[infoset_hist] = {action: 1 / len(actions) for action in actions}
+
+            for action in actions:
+                strat[(infoset_hist, action)] = 1 / len(actions)
 
         return strat
 
@@ -245,7 +285,7 @@ class Game:
                     for action, child_hist in self.get_children(node_hist):
                         stack.append((
                             child_hist,
-                            cur_prob * opp_strat[node["infoset"]][action]
+                            cur_prob * opp_strat[(node["infoset"], action)]
                         ))
 
             elif node["type"] == "chance":
@@ -288,7 +328,7 @@ class Game:
                     else:
                         # Play according to opp strat distribution
                         res = sum([
-                            opp_strat[node["infoset"]][action] * get_util(child_hist) \
+                            opp_strat[(node["infoset"], action)] * get_util(child_hist) \
                             for action, child_hist in self.get_children(hist)
                         ])
 
@@ -322,6 +362,6 @@ class Game:
 if __name__ == "__main__":
     game = Game("./efgs/kuhn.txt")
 
-    uniform_2 = game.gen_uniform_strat("2")
+    uniform_2 = game.gen_uniform_behav_strat("2")
     br_1 = game.get_best_response("1", uniform_2)
     pprint(br_1)
