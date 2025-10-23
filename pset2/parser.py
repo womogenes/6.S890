@@ -261,42 +261,54 @@ class Game:
 
         # Utility per node
         @lru_cache(None)
-        def get_util(infoset_hist):
+        def get_util(hist):
             """
             Get utility of given infoset.
             """
-            infoset = self.infosets[infoset_hist]
+            if (hist in self.nodes) and (hist not in self.infosets):
+                # Dealing with individual node here (not infoset)
+                node = self.nodes[hist]
+                if node["type"] == "terminal":
+                    return node["payoffs"][player]
+                elif node["type"] == "chance":
+                    return sum([
+                        node["probs"][action] * get_util(child_hist) \
+                        for action, child_hist in self.get_children(hist)
+                    ])
+                else:
+                    assert node["type"] == "player"
+                    if node["player"] == player:
+                        # Delegate to the infoset
+                        return get_util(node["infoset"])
 
-            # For each *action*, figure out the expected utility
-            E_util = defaultdict(float)
-            for subnode_hist in infoset["nodes"]:
-                subnode_p = cf_prob[subnode_hist]
-                for action, child_hist in self.get_children(subnode_hist):
-                    child_node = self.nodes[child_hist]
-                    if child_node["type"] == "terminal":
-                        E_util[action] += child_node["payoffs"][player] * subnode_p
-                        continue
-                    elif child_node["type"] == "chance":
-                        pass
+                    else:
+                        # Play according to opp strat distribution
+                        return sum([
+                            opp_strat[node["infoset"]][action] * get_util(child_hist) \
+                            for action, child_hist in self.get_children(hist)
+                        ])
 
-                    # Simulate what opponent would do
-                    for opp_action, opp_child_hist in self.get_children(child_hist):
-                        p = subnode_p * opp_strat[child_hist][opp_action]
-                        opp_child = self.nodes[opp_child_hist]
-                        
-                        # If terminal, pays off
-                        if opp_child["type"] == "terminal":
-                            E_util[action] += opp_child["payoffs"][player] * p
-                        else:
-                            E_util[action] += get_util(opp_child["infoset"]) * p
+            # Dealing with infoset
+            else:
+                assert hist in self.infosets
+                infoset = self.infosets[hist]
 
-            # E_util reports exp. utility of playing each action at infoset
-            # Pick action with highest expected utility
-            E_util_sorted = sorted(E_util.items(), key=lambda a, util: -util)
-            best_action, exp_util = E_util_sorted[0]
+                # For each *action*, figure out the expected utility
+                E_util = defaultdict(float)
 
-            strat[infoset_hist] = best_action
-            return exp_util
+                for subnode_hist in infoset["nodes"]:
+                    # Precomputed conterfactual probability for this node
+                    subnode_p = cf_prob[subnode_hist]
+                    for action, child_hist in self.get_children(subnode_hist):
+                        E_util[action] += subnode_p * get_util(child_hist)
+
+                # E_util reports exp. utility of playing each action at infoset
+                # Pick action with highest expected utility
+                E_util_sorted = sorted(E_util.items(), key=lambda util: -util[1])
+                best_action, exp_util = E_util_sorted[0]
+
+                strat[hist] = best_action
+                return exp_util
         
         return get_util("/")
 
@@ -319,7 +331,7 @@ class Game:
 
 
 if __name__ == "__main__":
-    game = Game("./efgs/kuhn.txt")
+    game = Game("./efgs/rpss.txt")
 
     # print("===== NODES =====")
     # pprint(game.nodes)
