@@ -270,7 +270,7 @@ class Game:
 
         return strat
 
-    def get_best_response(self, player: str, opp_strat: list):
+    def get_best_response(self, player: str, opp_strat: dict):
         """
         Finds best response for given player, knowing other player's
             strategy specification.
@@ -372,16 +372,31 @@ class Game:
 
         return get_util("/"), strat
 
+    def get_nash_gap(self, p1_strat: dict, p2_strat: dict):
+        """
+        The Nash gap is defined as
+            gamma(x, y) = max_(x* in X) u_1(x*, y) - min(y* in Y) u_1(x, y*)
+        For two-player zero-sum games, this reduces to
+            max_(x* in X)(x* in X)(x*, y) + max_(y* in Y) u_2(x, y*)
+        """
+        max_u1 = self.get_best_response("1", p2_strat)[0]
+        max_u2 = self.get_best_response("2", p1_strat)[0]
+        return max_u1 + max_u2
+
 
 if __name__ == "__main__":
-    game = Game("./efgs/kuhn.txt")
+    for game_type in ["rpss", "kuhn", "leduc2"]:
+        print(f"\n===== {game_type} =====")
+        game = Game(f"./efgs/{game_type}.txt")
 
-    # Uniform strategy for P2
-    u2 = game.gen_uniform_behav_strat("2")
+        # Uniform strategy for P2
+        u2 = game.gen_uniform_behav_strat("2")
 
-    # Best response to U2 for P1
-    br1 = game.get_best_response("1", u2)
-    pprint(br1)
+        # Best response to U2 for P1
+        br1 = game.get_best_response("1", u2)
+        print(f"Exp. utility of P1's best response to P2 uniform: {br1[0]:.5f}")
 
-    u2_seq = game.behav_to_seq("2", u2)
-    print(game.is_seq_strat("2", u2_seq))
+        # Find Nash gap of both players playing uniform
+        u1 = game.gen_uniform_behav_strat("1")
+
+        print(f"Nash gap of both players playing uniform: {game.get_nash_gap(u1, u2):.5f}")
