@@ -253,8 +253,12 @@ class Game:
                         child_hist,
                         cur_prob * node["probs"][action]
                     ))
-
-        print(f"{cf_prob=}")
+        
+        # Normalize within infosets
+        for infoset in self.infosets.values():
+            net_p = sum([cf_prob[subnode] for subnode in infoset["nodes"]])
+            for subnode in infoset["nodes"]:
+                cf_prob[subnode] /= net_p
 
         # Step 2: make strategy for player 1
         strat = {}
@@ -269,9 +273,9 @@ class Game:
                 # Dealing with individual node here (not infoset)
                 node = self.nodes[hist]
                 if node["type"] == "terminal":
-                    return node["payoffs"][player]
+                    res = node["payoffs"][player]
                 elif node["type"] == "chance":
-                    return sum([
+                    res = sum([
                         node["probs"][action] * get_util(child_hist) \
                         for action, child_hist in self.get_children(hist)
                     ])
@@ -279,11 +283,10 @@ class Game:
                     assert node["type"] == "player"
                     if node["player"] == player:
                         # Delegate to the infoset
-                        return get_util(node["infoset"])
-
+                        res = get_util(node["infoset"])
                     else:
                         # Play according to opp strat distribution
-                        return sum([
+                        res = sum([
                             opp_strat[node["infoset"]][action] * get_util(child_hist) \
                             for action, child_hist in self.get_children(hist)
                         ])
@@ -308,9 +311,11 @@ class Game:
                 best_action, exp_util = E_util_sorted[0]
 
                 strat[hist] = best_action
-                return exp_util
-        
-        return get_util("/")
+                res = exp_util
+            
+            return res
+
+        return get_util("/"), strat
 
     """
     Known:
@@ -331,7 +336,7 @@ class Game:
 
 
 if __name__ == "__main__":
-    game = Game("./efgs/rpss.txt")
+    game = Game("./efgs/kuhn.txt")
 
     # print("===== NODES =====")
     # pprint(game.nodes)
@@ -348,7 +353,5 @@ if __name__ == "__main__":
     # pprint(game.all_seqs)
 
     uniform_2 = game.gen_uniform_strat("2")
-    print(f"{uniform_2=}")
-
     br_1 = game.get_best_response("1", uniform_2)
-    print(br_1)
+    pprint(br_1)
