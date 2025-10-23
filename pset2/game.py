@@ -204,7 +204,8 @@ class Game:
         """
         strat = {}
         infoset_hists = [
-            hist for hist, infoset in self.infosets.items() if infoset["player"] == player]
+            hist for hist, infoset in self.infosets.items() if infoset["player"] == player
+        ]
 
         for infoset_hist in infoset_hists:
             infoset = self.infosets[infoset_hist]
@@ -317,40 +318,9 @@ class Game:
 
         return get_util("/"), strat
 
-    """
-    Known:
-        5.1:
-            nash gap of both uniform:
-                rpss: 2/3
-                kuhn: 0.916 (truncated, not rounded)
-                leduc: 4.74 (truncated)
-        5.2:
-            plots achieve best response values
-        5.3:
-            nash gaps should be approx. 0
-            value of game (p1):
-                rpss: 0
-                kuhn: -0.05
-                leduc: -0.80??
-    """
-
 
 if __name__ == "__main__":
     game = Game("./efgs/kuhn.txt")
-
-    # print("===== NODES =====")
-    # pprint(game.nodes)
-    # print()
-    # print("===== INFOSETS =====")
-    # pprint(game.infosets)
-    # print()
-    # print("===== PLAYERS =====")
-    # print(game.players)
-    # print()
-    # print("===== PARARENT SEQUENCES =====")
-    # pprint(game.par_seq)
-    # print("===== ALL SEQUENCES =====")
-    # pprint(game.all_seqs)
 
     uniform_2 = game.gen_uniform_strat("2")
     br_1 = game.get_best_response("1", uniform_2)
