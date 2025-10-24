@@ -391,77 +391,64 @@ class Game:
     
     def build_tfdp(self, player: str):
         """
-        Construct a tree with decision nodes and observation nodes.
-        Assumes perfect recall structure of the game.
+        Build a TFDP tree for the given player.
+        Decision nodes: infoset labels (J)
+        Observation nodes: history prefixes up to next player decision (K)
+        Terminal nodes: full history strings
         """
         tree = {}
 
-        # stack tracks (node id, representative game node)]
-        stack = [("/", "/")]
-        visited = set()
+        def join_parts(parts):
+            if len(parts) == 0:
+                return "/"
+            return f"/{'/'.join(parts)}/"
 
-        while len(stack) > 0:
-            tfdp_hist, repr_hist = stack.pop()
-            if tfdp_hist in visited:
+        # Exploit strings <3
+        # NOTE: terminal nodes not included, but they don't matter for CFR
+        for info_hist, infoset in self.infosets.items():
+            if infoset["player"] != player:
                 continue
-            visited.add(tfdp_hist)
+                
+            # Add children
+            tree[info_hist] = {
+                "type": "decision",
+                "actions": [],
+                "children": {},
+            }
+            for action in infoset["actions"]:
+                tree[info_hist]["actions"].append(action)
+                tree[info_hist]["children"][action] = f"{info_hist}P{player}:{action}/"
 
-            assert repr_hist in self.nodes
-            node = self.nodes[repr_hist]
+            parts = info_hist.strip("/").split("/")
+            if info_hist == "/":
+                continue
+            
+            # Backtrack until we reach an info node
+            for i in range(len(parts), -1, -1):
+                pre_parts = join_parts(parts[:i])
+                pre_pre_parts = join_parts(parts[:i-1])
 
-            if node["type"] == "player" and node["player"] == player:
-                tree[tfdp_hist] = {
-                    "type": "decision",
-                    "actions": [],
-                    "children": {},
-                }
+                # One extra piece of information for pre_pre_parts node
+                if pre_pre_parts in self.infosets:
+                    assert parts[i-1].startswith(f"P{player}")
+                    break
 
-                for action, child_hist in self.get_children(repr_hist):
-                    # If child is terminal node
-                    child = self.nodes[child_hist]
-
-                    # Player should never make two choices in a row
-                    assert not (child["type"] == "player" and child["player"] == player)
-
-                    tfdp_child_hist = f"{tfdp_hist}P{player}:{action}/"
-                    stack.append((tfdp_child_hist, child_hist))
-                    tree[tfdp_hist]["actions"].append(action)
-                    tree[tfdp_hist]["children"][action] = tfdp_child_hist
-
-            else:
-                # OBSERVATION NODE
-                if node["type"] == "player" or node["type"] == "chance":
-                    # If it's a player node, should be opp
-                    assert node["type"] != "player" or node["player"] != player
-                    
-                    tree[tfdp_hist] = {
+                if pre_pre_parts not in tree:
+                    tree[pre_pre_parts] = {
                         "type": "obs",
                         "signals": [],
                         "children": {},
                     }
-                    for action, child_hist in self.get_children(repr_hist):
-                        child_node = self.nodes[child_hist]
+                
+                last_sig = parts[i-1]
+                if last_sig in tree[pre_pre_parts]["children"]:
+                    continue
 
-                        # ASSUME CHILD IS DECISION NODE
-                        if child_node["type"] == "terminal":
-                            assert node["type"] == "player", "Node before terminal was not player node"
-                            tfdp_child_hist = f"{tfdp_hist}O:{action}/"
-                        else:
-                            assert child_node["type"] == "player" and child_node["player"] == player, \
-                                f"Expected opp node to lead to player node\n{child_node}"
-                            tfdp_child_hist = child_node["infoset"]
-
-                        tree[tfdp_hist]["signals"].append(action)
-                        tree[tfdp_hist]["children"][action] = tfdp_child_hist
-                        stack.append((tfdp_child_hist, child_hist))
-
-                else:
-                    assert node["type"] == "terminal"
-                    tree[tfdp_hist] = {
-                        "type": "terminal",
-                    }
+                tree[pre_pre_parts]["signals"].append(last_sig)
+                tree[pre_pre_parts]["children"][last_sig] = pre_parts
 
         return tree
+
 
 
 if __name__ == "__main__":
