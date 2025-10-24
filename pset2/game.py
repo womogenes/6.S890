@@ -198,6 +198,52 @@ class Game:
             seq: idx for idx, seq in enumerate(seqs)
         } for seqs in self.all_seqs]
 
+    def gen_payoff_mat(self):
+        """
+        Generates payoff matrix from perspective of player 1
+        We now use the fact that this is a zero-sum game.
+        """
+        pass
+
+    def get_cf_prob(self, player: str, opp_seq_strat: dict):
+        """
+        seq_strat is opponent's strat in sequential form.
+        This calculates the likelihood of reaching each node
+            given we always play to get to that node, but opponent
+            and chance play according to randomness.
+        """
+        cf_prob = {}
+
+        for node_hist, node in self.nodes.items():
+            if node_hist == "/":
+                cf_prob[node_hist] = 1
+                continue
+
+            parts = node_hist.strip("/").split("/")
+            prob = 1
+            cur_hist = "/"
+            for part in parts:
+                party, action = part.split(":")
+                if party[1:] == player:
+                    cur_hist += f"{part}/"
+                    continue
+
+                cur_node = self.nodes[cur_hist]
+                if cur_node["type"] == "player":
+                    assert cur_node["player"] != player
+                    prob *= opp_seq_strat[(cur_node["infoset"], action)]
+
+                else:
+                    # We can't be at a terminal node
+                    assert cur_node["type"] == "chance"
+                    prob *= cur_node["probs"][action]
+
+                cur_hist += f"{part}/"
+
+            cf_prob[node_hist] = prob
+
+        return cf_prob
+
     def behav_to_seq(self, player: str, behav_strat: dict):
         """
         Convert behavioral strat to sequential strat.
@@ -270,7 +316,7 @@ class Game:
 
         return strat
 
-    def get_best_response(self, player: str, opp_strat: dict):
+    def get_best_response(self, player: str, opp_behav_strat: dict):
         """
         Finds best response for given player, knowing other player's
             strategy specification.
@@ -279,35 +325,10 @@ class Game:
         # And then renormalize within infosets
         # Top-down recursion
         # NOTE: this is conditional on other player's strat
-        cf_prob = {}
-        stack = [("/", 1.0)]
-        while len(stack) > 0:
-            node_hist, cur_prob = stack.pop()
+        opp = "2" if player == "1" else "1"
 
-            if node_hist in cf_prob:
-                continue
-            cf_prob[node_hist] = cur_prob
-
-            node = self.nodes[node_hist]
-            if node["type"] == "player":
-                if node["player"] == player:
-                    # Play everything without modify probabilities
-                    for _, child_hist in self.get_children(node_hist):
-                        stack.append((child_hist, cur_prob))
-                else:
-                    # Play everything, DO modify probabilities based on other player's strat
-                    for action, child_hist in self.get_children(node_hist):
-                        stack.append((
-                            child_hist,
-                            cur_prob * opp_strat[(node["infoset"], action)]
-                        ))
-
-            elif node["type"] == "chance":
-                for action, child_hist in self.get_children(node_hist):
-                    stack.append((
-                        child_hist,
-                        cur_prob * node["probs"][action]
-                    ))
+        opp_seq_strat = self.behav_to_seq(opp, opp_behav_strat)
+        cf_prob = self.get_cf_prob(player, opp_seq_strat)
         
         # Normalize within infosets
         for infoset in self.infosets.values():
@@ -342,7 +363,7 @@ class Game:
                     else:
                         # Play according to opp strat distribution
                         res = sum([
-                            opp_strat[(node["infoset"], action)] * get_util(child_hist) \
+                            opp_behav_strat[(node["infoset"], action)] * get_util(child_hist) \
                             for action, child_hist in self.get_children(hist)
                         ])
 
@@ -520,4 +541,4 @@ if __name__ == "__main__":
 
         print(f"Nash gap of both players playing uniform: {game.get_nash_gap(u1, u2):.5f}")
 
-        pprint(game.build_tfdp("1"))
+        # pprint(game.build_tfdp("1"))
