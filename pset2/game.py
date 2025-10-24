@@ -26,6 +26,7 @@ class Game:
         """
         self.parse_game_file(game_file)
         self.gen_sequences()
+        self.gen_payoff_mat()
 
     def parse_game_file(self, game_file: str):
         """
@@ -193,7 +194,7 @@ class Game:
                 stack.append((child_hist, tuple(new_last_seqs)))
         
         self.par_seq = par_seq
-        self.all_seqs = {player: sorted(seqs) for player, seqs in all_seqs.items()}
+        self.all_seqs = {player: [None] + sorted(seqs) for player, seqs in all_seqs.items()}
         self.seq2idx = [{
             seq: idx for idx, seq in enumerate(seqs)
         } for seqs in self.all_seqs]
@@ -203,7 +204,55 @@ class Game:
         Generates payoff matrix from perspective of player 1
         We now use the fact that this is a zero-sum game.
         """
-        pass
+        seqs1 = self.all_seqs["1"]
+        seqs2 = self.all_seqs["2"]
+        seq2idx1 = {seq: idx for idx, seq in enumerate(seqs1)}
+        seq2idx2 = {seq: idx for idx, seq in enumerate(seqs2)}
+
+        assert seqs1[0] == None
+        assert seqs2[0] == None
+
+        n1 = len(seqs1)
+        n2 = len(seqs2)
+
+        M = np.zeros((n1, n2))
+
+        # Go over all terminals. Each contributes cf_prob[terminal] times
+        #   its utility.
+        for node_hist, node in self.nodes.items():
+            if node["type"] != "terminal":
+                continue
+
+            # Go through sequences
+            parts = node_hist.strip("/").split("/")
+            assert node["payoffs"]["1"] == -node["payoffs"]["2"]
+            payoff = node["payoffs"]["1"]
+
+            seq1 = None
+            seq2 = None
+
+            cur_hist = "/"
+            chance_prob = 1
+            for part in parts:
+                cur_node = self.nodes[cur_hist]
+                party, action = part.split(":")
+
+                if cur_node["type"] == "chance":
+                    assert party == "C"
+                    chance_prob *= cur_node["probs"][action]
+
+                else:
+                    assert cur_node["type"] == "player"
+                    seq = (cur_node["infoset"], action)
+                    if seq in seq2idx1:
+                        seq1 = seq2idx1[seq]
+                    elif seq in seq2idx2:
+                        seq2 = seq2idx2[seq]
+
+                M[seq1,seq2] += chance_prob * payoff
+                cur_hist += f"{part}/"
+
+        self.M = M
 
     def get_cf_prob(self, player: str, opp_seq_strat: dict):
         """
@@ -214,7 +263,7 @@ class Game:
         """
         cf_prob = {}
 
-        for node_hist, node in self.nodes.items():
+        for node_hist in self.nodes:
             if node_hist == "/":
                 cf_prob[node_hist] = 1
                 continue
@@ -270,8 +319,13 @@ class Game:
             seq: get_seq_prob(seq)
             for seq in self.all_seqs[player]
         }
-        res[None] = 1
         return res
+
+    def seq2vec(self, player: str, seq_strat: dict):
+        """
+        Vectorize
+        """
+        return np.array([seq_strat[seq] for seq in self.all_seqs[player]])
 
     def verify_seq_strat(self, player: str, seq_strat: dict):
         """
@@ -337,7 +391,7 @@ class Game:
                 cf_prob[subnode] /= net_p
 
         # Step 2: make strategy for player 1
-        strat = {}
+        strat = {seq: 0 for seq in self.all_seqs[player]}
 
         # Utility per node
         @lru_cache(None)
@@ -386,7 +440,7 @@ class Game:
                 E_util_sorted = sorted(E_util.items(), key=lambda util: -util[1])
                 best_action, exp_util = E_util_sorted[0]
 
-                strat[hist] = best_action
+                strat[(hist, best_action)] = 1
                 res = exp_util
             
             return res
@@ -533,8 +587,8 @@ if __name__ == "__main__":
         u2 = game.gen_uniform_behav_strat("2")
 
         # Best response to U2 for P1
-        br1 = game.get_best_response("1", u2)
-        print(f"Exp. utility of P1's best response to P2 uniform: {br1[0]:.5f}")
+        br1_exp, br1 = game.get_best_response("1", u2)
+        print(f"Exp. utility of P1's best response to P2 uniform: {br1_exp:.5f}")
 
         # Find Nash gap of both players playing uniform
         u1 = game.gen_uniform_behav_strat("1")
@@ -542,3 +596,12 @@ if __name__ == "__main__":
         print(f"Nash gap of both players playing uniform: {game.get_nash_gap(u1, u2):.5f}")
 
         # pprint(game.build_tfdp("1"))
+
+        u2_seq = game.behav_to_seq("2", u2)
+        br1_seq = game.behav_to_seq("1", br1)
+
+        u2_seq_vec = game.seq2vec("2", u2_seq)
+        br1_seq_vec = game.seq2vec("1", br1_seq)
+        print(u2_seq_vec.shape, br1_seq_vec.shape)
+
+        print(br1_seq_vec @ game.M @ u2_seq_vec)
