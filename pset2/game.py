@@ -227,7 +227,7 @@ class Game:
         res[None] = 1
         return res
 
-    def is_seq_strat(self, player: str, seq_strat: dict):
+    def verify_seq_strat(self, player: str, seq_strat: dict):
         """
         Verify that a strategy is indeed sequential, i.e. that
             x[None] == 1 and

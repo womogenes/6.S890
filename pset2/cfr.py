@@ -59,7 +59,6 @@ class RegretMatching:
         prev_r = self.r[-1]
         assert g.shape == prev_r.shape, "Grad vector shape does not match regret shape"
 
-        print(f"{self.x=}, {prev_r=}")
         self.r.append(prev_r + g - np.dot(g, self.x[-1]) * np.ones_like(prev_r))
 
 class CFR:
@@ -80,6 +79,7 @@ class CFR:
         self.x = []
         self.Sigma = game.all_seqs[player]
         self.game = game
+        self.player = player
 
     def next_strategy(self):
         self.b = {}
@@ -105,6 +105,9 @@ class CFR:
                     return x(p_j) * self.b[j][a]
 
         self.x = {seq: x(seq) for seq in self.Sigma}
+        self.x[None] = 1
+
+        game.verify_seq_strat(self.player, self.x)
         
         return self.x
     
@@ -148,5 +151,4 @@ if __name__ == "__main__":
     game = Game(f"./efgs/{game_type}.txt")
     cfr = CFR(game, "1")
 
-    pprint(cfr.next_strategy())
     cfr.observe_util({ seq: 0 for seq in cfr.game.all_seqs["1"] })
