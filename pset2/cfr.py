@@ -151,4 +151,5 @@ if __name__ == "__main__":
     game = Game(f"./efgs/{game_type}.txt")
     cfr = CFR(game, "1")
 
+    cfr.next_strategy()
     cfr.observe_util({ seq: 0 for seq in cfr.game.all_seqs["1"] })
