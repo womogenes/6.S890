@@ -346,6 +346,13 @@ class Game:
                 strat[(infoset_hist, action)] = 1 / len(actions)
 
         return strat
+    
+    def get_best_response_seq(self, player: str, opp_seq_strat: np.ndarray):
+        """
+        Convert sequential strategy in vector form to behavioral strategy
+            so that we can use it with get_best_response.
+        """
+        pass
 
     def get_best_response(self, player: str, opp_behav_strat: dict):
         """

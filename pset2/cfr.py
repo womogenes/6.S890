@@ -112,7 +112,7 @@ class CFR:
         self.x = {seq: x(seq) for seq in self.Sigma}
         self.x[None] = 1
 
-        game.verify_seq_strat(self.player, self.x)
+        self.game.verify_seq_strat(self.player, self.x)
 
         if as_vec:
             return np.array([self.x[seq] for seq in self.Sigma])
@@ -157,7 +157,10 @@ class CFR:
             self.R[j].observe_utility(gj)
 
 
-if __name__ == "__main__":
+def part_52():
+    """
+    Given that player 2 plays a uniform strategy, do CFR on player 1.
+    """
     for game_type in ["rpss", "kuhn", "leduc2"]:
         game = Game(f"./efgs/{game_type}.txt")
         cfr = CFR(game, "1")
@@ -202,3 +205,52 @@ if __name__ == "__main__":
         plt.plot(p1_util_hist)
         plt.title(f"P1's exp. util. using CFR vs. uniform in {game_type}")
         plt.show()
+
+def part_53():
+    """
+    Both players do CFR.
+    """
+    for game_type in ["rpss", "kuhn", "leduc2"]:
+        game = Game(f"./efgs/{game_type}.txt")
+
+        # PROBLEM 5.3: CFR for both players
+        MAX_T = 1000
+
+        n1 = len(game.all_seqs["1"])
+        n2 = len(game.all_seqs["2"])
+        x_hist = np.zeros((MAX_T, n1))
+        y_hist = np.zeros((MAX_T, n2))
+
+        p1_util_hist = [None] * MAX_T
+
+        # Initialize CFR algos for both players
+        cfr1 = CFR(game, "1")
+        cfr2 = CFR(game, "2")
+
+        for t in tqdm(range(MAX_T), ncols=80):
+            x = cfr1.next_strategy(as_vec=True)
+            y = cfr2.next_strategy(as_vec=True)
+
+            x_hist[t] = x
+            y_hist[t] = y
+
+            g1 = game.M @ y
+            cfr1.observe_util(g1, as_vec=True)
+
+            g2 = -game.M.T @ x
+            cfr2.observe_util(g2, as_vec=True)
+
+            x_avg = np.mean(x_hist[:t+1], axis=0)
+            y_avg = np.mean(y_hist[:t+1], axis=0)
+
+            p1_util_hist[t] = x_avg @ game.M @ y_avg
+        
+        print(f"Final value: {p1_util_hist[-1]:.5f}")
+
+        plt.plot(p1_util_hist)
+        plt.title(f"P1's exp. util. using CFR vs. uniform in {game_type}")
+        plt.show()
+
+if __name__ == "__main__":
+    # part_52()
+    part_53()
