@@ -96,6 +96,9 @@ class CFR:
             """
             This is just for computing sequence-form strat.
             """
+            if seq is None:
+                return 1
+            
             j, a = seq
             for a in self.J[j]["actions"]:
                 p_j = self.game.par_seq[(j, a)]
