@@ -256,8 +256,7 @@ class Game:
         Strategy is represented in behavioral form (oops)
         """
         strat = {}
-        infoset_hists = [
-            hist for hist, infoset in self.infosets.items() if infoset["player"] == player]
+        infoset_hists = self.get_infosets(player)
 
         for infoset_hist in infoset_hists:
             infoset = self.infosets[infoset_hist]
@@ -382,6 +381,87 @@ class Game:
         max_u1 = self.get_best_response("1", p2_strat)[0]
         max_u2 = self.get_best_response("2", p1_strat)[0]
         return max_u1 + max_u2
+    
+    @lru_cache(None)
+    def get_infosets(self, player: str):
+        return [
+            info_hist \
+            for info_hist, infoset in self.infosets.items() if infoset["player"] == player
+        ]
+    
+    def build_tfdp(self, player: str):
+        """
+        Construct a tree with decision nodes and observation nodes.
+        Assumes perfect recall structure of the game.
+        """
+        tree = {}
+
+        # stack tracks (node id, representative game node)]
+        stack = [("/", "/")]
+        visited = set()
+
+        while len(stack) > 0:
+            tfdp_hist, repr_hist = stack.pop()
+            if tfdp_hist in visited:
+                continue
+            visited.add(tfdp_hist)
+
+            assert repr_hist in self.nodes
+            node = self.nodes[repr_hist]
+
+            if node["type"] == "player" and node["player"] == player:
+                tree[tfdp_hist] = {
+                    "type": "decision",
+                    "actions": [],
+                    "children": {},
+                }
+
+                for action, child_hist in self.get_children(repr_hist):
+                    # If child is terminal node
+                    child = self.nodes[child_hist]
+
+                    # Player should never make two choices in a row
+                    assert not (child["type"] == "player" and child["player"] == player)
+
+                    tfdp_child_hist = f"{tfdp_hist}P{player}:{action}/"
+                    stack.append((tfdp_child_hist, child_hist))
+                    tree[tfdp_hist]["actions"].append(action)
+                    tree[tfdp_hist]["children"][action] = tfdp_child_hist
+
+            else:
+                # OBSERVATION NODE
+                if node["type"] == "player" or node["type"] == "chance":
+                    # If it's a player node, should be opp
+                    assert node["type"] != "player" or node["player"] != player
+                    
+                    tree[tfdp_hist] = {
+                        "type": "obs",
+                        "signals": [],
+                        "children": {},
+                    }
+                    for action, child_hist in self.get_children(repr_hist):
+                        child_node = self.nodes[child_hist]
+
+                        # ASSUME CHILD IS DECISION NODE
+                        if child_node["type"] == "terminal":
+                            assert node["type"] == "player", "Node before terminal was not player node"
+                            tfdp_child_hist = f"{tfdp_hist}O:{action}/"
+                        else:
+                            assert child_node["type"] == "player" and child_node["player"] == player, \
+                                f"Expected opp node to lead to player node\n{child_node}"
+                            tfdp_child_hist = child_node["infoset"]
+
+                        tree[tfdp_hist]["signals"].append(action)
+                        tree[tfdp_hist]["children"][action] = tfdp_child_hist
+                        stack.append((tfdp_child_hist, child_hist))
+
+                else:
+                    assert node["type"] == "terminal"
+                    tree[tfdp_hist] = {
+                        "type": "terminal",
+                    }
+
+        return tree
 
 
 if __name__ == "__main__":
@@ -400,3 +480,5 @@ if __name__ == "__main__":
         u1 = game.gen_uniform_behav_strat("1")
 
         print(f"Nash gap of both players playing uniform: {game.get_nash_gap(u1, u2):.5f}")
+
+        pprint(game.build_tfdp("1"))
