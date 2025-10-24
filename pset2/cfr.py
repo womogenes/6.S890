@@ -28,6 +28,7 @@ The idea:
 import numpy as np
 from functools import lru_cache
 
+from tqdm import tqdm
 from pprint import pprint
 import matplotlib.pyplot as plt
 
@@ -43,12 +44,13 @@ class RegretMatching:
 
     def next_strategy(self):
         prev_r = self.r[-1]
-        if np.any(prev_r != 0):
-            strat = prev_r / np.linalg.norm(prev_r, ord=1)
+        pos_r = np.maximum(prev_r, 0)
+        if np.sum(pos_r) > 0:
+            strat = pos_r / np.sum(pos_r)
         else:
             # Return uniform strategy by default
             strat = self.x[0]
-        
+
         # Turn into a dict for the outside world
         self.x.append(strat)
         return {a: float(strat[i]) for i, a in enumerate(self.A)}
@@ -99,14 +101,13 @@ class CFR:
             """
             if seq is None:
                 return 1
-            
+
             j, a = seq
-            for a in self.J[j]["actions"]:
-                p_j = self.game.par_seq[(j, a)]
-                if p_j is None:
-                    return self.b[j][a]
-                else:
-                    return x(p_j) * self.b[j][a]
+            p_j = self.game.par_seq[(j, a)]
+            if p_j is None:
+                return self.b[j][a]
+            else:
+                return x(p_j) * self.b[j][a]
 
         self.x = {seq: x(seq) for seq in self.Sigma}
         self.x[None] = 1
@@ -157,42 +158,47 @@ class CFR:
 
 
 if __name__ == "__main__":
-    game_type = "kuhn"
+    for game_type in ["rpss", "kuhn", "leduc2"]:
+        game = Game(f"./efgs/{game_type}.txt")
+        cfr = CFR(game, "1")
 
-    game = Game(f"./efgs/{game_type}.txt")
-    cfr = CFR(game, "1")
+        cfr.next_strategy()
+        cfr.observe_util({ seq: 0 for seq in cfr.game.all_seqs["1"] })
 
-    cfr.next_strategy()
-    cfr.observe_util({ seq: 0 for seq in cfr.game.all_seqs["1"] })
+        # PROBLEM 5.2: CFR against uniform strategy
+        MAX_T = 1000
 
-    # PROBLEM 5.2: CFR against uniform strategy
-    MAX_T = 10
+        n1 = len(game.all_seqs["1"])
+        n2 = len(game.all_seqs["2"])
+        x_hist = np.zeros((MAX_T, n1))
+        y_hist = np.zeros((MAX_T, n2))
 
-    n1 = len(game.all_seqs["1"])
-    n2 = len(game.all_seqs["2"])
-    x_hist = np.zeros((MAX_T, n1))
-    y_hist = np.zeros((MAX_T, n2))
+        p1_util_hist = [None] * MAX_T
 
-    p1_util_hist = [None] * MAX_T
+        # Fix p2 to be uniform strat
+        u2_behav = game.gen_uniform_behav_strat("2")
+        y = game.seq2vec("2", game.behav_to_seq("2", u2_behav))
+        cfr1_uniform = CFR(game, "1")
 
-    # Fix p2 to be uniform strat
-    y = game.seq2vec("2", game.behav_to_seq("2", game.gen_uniform_behav_strat("2")))
-    cfr1_uniform = CFR(game, "1")
+        for t in tqdm(range(MAX_T), ncols=80):
+            x = cfr1_uniform.next_strategy(as_vec=True)
+            x_hist[t] = x
+            # y is static here
+            y_hist[t] = y
 
-    for t in range(MAX_T):
-        x = cfr1_uniform.next_strategy(as_vec=True)
-        x_hist[t] = x
-        # y is static here
-        y_hist[t] = y
+            g = game.M @ y
+            cfr1_uniform.observe_util(g, as_vec=True)
 
-        g = game.M @ y
-        cfr1_uniform.observe_util(g, as_vec=True)
+            x_avg = np.mean(x_hist[:t+1], axis=0)
+            y_avg = np.mean(y_hist[:t+1], axis=0)
 
-        x_avg = np.mean(x_hist[:t+1], axis=0)
-        y_avg = np.mean(y_hist[:t+1], axis=0)
+            p1_util_hist[t] = x_avg @ game.M @ y_avg
+        
+        print(f"Final value: {p1_util_hist[-1]:.5f}")
 
-        p1_util_hist[t] = x_avg @ game.M @ y_avg
-        print(p1_util_hist)
-    
-    plt.plot(p1_util_hist)
-    plt.show()
+        br1_util, br1 = game.get_best_response("1", u2_behav)
+        print(f"  Expected: {br1_util:.5f}")
+
+        plt.plot(p1_util_hist)
+        plt.title(f"P1's exp. util. using CFR vs. uniform in {game_type}")
+        plt.show()

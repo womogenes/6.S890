@@ -313,11 +313,11 @@ class Game:
                 equals entry at parent of node.
         """
         assert seq_strat[None] == 1
-        
+
         for info_hist, info_node in self.infosets.items():
             if info_node["player"] != player:
                 continue
-            
+
             actions = info_node["actions"]
             v1 = sum([
                 seq_strat[(info_hist, action)] \
