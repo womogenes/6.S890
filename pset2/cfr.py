@@ -246,13 +246,17 @@ def part_53():
             y_avg = np.mean(y_hist[:t+1], axis=0)
 
             p1_util_hist[t] = x_avg @ game.M @ y_avg
-            nash_gap_hist.append(game.get_nash_gap_vec(x_avg, y_avg))
+            nash_gap_hist[t] = game.get_nash_gap_vec(x_avg, y_avg)
         
         print(f"Final P1 util: {p1_util_hist[-1]:.5f}")
         print(f"  Final Nash gap: {nash_gap_hist[-1]:.5f}")
 
-        plt.plot(p1_util_hist)
-        plt.title(f"P1 util {game_type}")
+        fig, axs = plt.subplots(1, 2, figsize=(12, 4))
+        axs[0].plot(p1_util_hist)
+        axs[0].set_title(f"P1 util {game_type}")
+        axs[1].plot(nash_gap_hist)
+        axs[1].set_title(f"Nash gap {game_type}")
+        
         plt.show()
 
 if __name__ == "__main__":
