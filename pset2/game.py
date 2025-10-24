@@ -199,7 +199,6 @@ class Game:
             seq: idx for idx, seq in enumerate(seqs)
         } for seqs in self.all_seqs]
 
-
     def gen_payoff_mat(self):
         """Payoff matrix compatible with full sequential-form vectors."""
         seqs1, seqs2 = self.all_seqs["1"], self.all_seqs["2"]
@@ -229,7 +228,6 @@ class Game:
 
         dfs("/", None, None, 1.0)
         self.M = M
-
 
     def get_cf_prob(self, player: str, opp_seq_strat: dict):
         """
@@ -298,11 +296,40 @@ class Game:
         }
         return res
 
+    def seq_to_behav(self, player: str, seq_strat: dict):
+        """
+        Convert sequential-form strategy back to behavioral form.
+
+        seq_strat:
+            key: sequence (infoset, action) or None
+            value: cumulative probability of playing that sequence
+        Returns:
+            dict mapping infoset -> {action: probability at this infoset}
+        """
+        res = {}
+        for info_hist in self.get_infosets(player):
+            actions = self.infosets[info_hist]["actions"]
+            parent_seq = self.par_seq[(info_hist, actions[0])]
+            parent_prob = seq_strat[parent_seq]
+            for action in actions:
+                res[(info_hist, action)] = seq_strat[(info_hist, action)] / parent_prob
+            
+        return res
+
     def seq2vec(self, player: str, seq_strat: dict):
         """
         Vectorize
         """
         return np.array([seq_strat[seq] for seq in self.all_seqs[player]])
+
+    def vec2seq(self, player: str, seq_strat: np.ndarray):
+        """
+        Devectorize
+        """
+        return {
+            self.all_seqs[player][idx]: value \
+            for idx, value in enumerate(seq_strat)
+        }
 
     def verify_seq_strat(self, player: str, seq_strat: dict):
         """
@@ -347,12 +374,15 @@ class Game:
 
         return strat
     
-    def get_best_response_seq(self, player: str, opp_seq_strat: np.ndarray):
+    def get_best_response_vec(self, player: str, opp_seq_strat_vec: np.ndarray):
         """
         Convert sequential strategy in vector form to behavioral strategy
             so that we can use it with get_best_response.
         """
-        pass
+        opp = "1" if player == "2" else "1"
+        opp_seq_strat = self.vec2seq(opp_seq_strat_vec)
+        opp_behav_strat = self.seq_to_behav(opp, opp_seq_strat)
+        return self.get_best_response(player, opp_behav_strat)
 
     def get_best_response(self, player: str, opp_behav_strat: dict):
         """
@@ -430,6 +460,17 @@ class Game:
             return res
 
         return get_util("/"), strat
+
+    def vec2seq(self, player: str, vec):
+        return {seq: vec[idx] for idx, seq in enumerate(self.all_seqs[player])}
+
+    def get_nash_gap_vec(self, x: np.ndarray, y: np.ndarray):
+        """
+        Convert vectorized sequential strategies to behavioral strategies
+        """
+        p1_behav = self.seq_to_behav("1", self.vec2seq("1", x))
+        p2_behav = self.seq_to_behav("2", self.vec2seq("2", y))
+        return self.get_nash_gap(p1_behav, p2_behav)
 
     def get_nash_gap(self, p1_strat: dict, p2_strat: dict):
         """
