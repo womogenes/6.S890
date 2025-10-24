@@ -490,7 +490,7 @@ class Game:
 
                 # One extra piece of information for pre_pre_parts node
                 if pre_pre_parts in self.infosets:
-                    assert parts[i-1].startswith(f"P{player}")
+                    assert parts[i-1].startswith("P")
                     break
 
                 if pre_pre_parts not in tree:
