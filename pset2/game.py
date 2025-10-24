@@ -199,60 +199,37 @@ class Game:
             seq: idx for idx, seq in enumerate(seqs)
         } for seqs in self.all_seqs]
 
+
     def gen_payoff_mat(self):
-        """
-        Generates payoff matrix from perspective of player 1
-        We now use the fact that this is a zero-sum game.
-        """
-        seqs1 = self.all_seqs["1"]
-        seqs2 = self.all_seqs["2"]
-        seq2idx1 = {seq: idx for idx, seq in enumerate(seqs1)}
-        seq2idx2 = {seq: idx for idx, seq in enumerate(seqs2)}
+        """Payoff matrix compatible with full sequential-form vectors."""
+        seqs1, seqs2 = self.all_seqs["1"], self.all_seqs["2"]
+        s1idx = {s: i for i, s in enumerate(seqs1)}
+        s2idx = {s: i for i, s in enumerate(seqs2)}
+        M = np.zeros((len(seqs1), len(seqs2)))
 
-        assert seqs1[0] == None
-        assert seqs2[0] == None
+        def dfs(node_hist, cur_s1, cur_s2, chance_p=1.0):
+            node = self.nodes[node_hist]
+            if node["type"] == "terminal":
+                M[s1idx[cur_s1], s2idx[cur_s2]] += chance_p * node["payoffs"]["1"]
+                return
 
-        n1 = len(seqs1)
-        n2 = len(seqs2)
+            if node["type"] == "chance":
+                for action, child in self.get_children(node_hist):
+                    dfs(child, cur_s1, cur_s2, chance_p * node["probs"][action])
+                return
 
-        M = np.zeros((n1, n2))
-
-        # Go over all terminals. Each contributes cf_prob[terminal] times
-        #   its utility.
-        for node_hist, node in self.nodes.items():
-            if node["type"] != "terminal":
-                continue
-
-            # Go through sequences
-            parts = node_hist.strip("/").split("/")
-            assert node["payoffs"]["1"] == -node["payoffs"]["2"]
-            payoff = node["payoffs"]["1"]
-
-            seq1 = None
-            seq2 = None
-
-            cur_hist = "/"
-            chance_prob = 1
-            for part in parts:
-                cur_node = self.nodes[cur_hist]
-                party, action = part.split(":")
-
-                if cur_node["type"] == "chance":
-                    assert party == "C"
-                    chance_prob *= cur_node["probs"][action]
-
+            # player node
+            p = node["player"]
+            for action, child in self.get_children(node_hist):
+                seq = (node["infoset"], action)
+                if p == "1":
+                    dfs(child, seq, cur_s2, chance_p)
                 else:
-                    assert cur_node["type"] == "player"
-                    seq = (cur_node["infoset"], action)
-                    if seq in seq2idx1:
-                        seq1 = seq2idx1[seq]
-                    elif seq in seq2idx2:
-                        seq2 = seq2idx2[seq]
+                    dfs(child, cur_s1, seq, chance_p)
 
-                M[seq1,seq2] += chance_prob * payoff
-                cur_hist += f"{part}/"
-
+        dfs("/", None, None, 1.0)
         self.M = M
+
 
     def get_cf_prob(self, player: str, opp_seq_strat: dict):
         """
