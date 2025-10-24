@@ -49,6 +49,7 @@ class RegretMatching:
             strat = self.x[0]
         
         # Turn into a dict for the outside world
+        self.x.append(strat)
         return {a: float(strat[i]) for i, a in enumerate(self.A)}
         
     def observe_utility(self, g):
@@ -57,7 +58,9 @@ class RegretMatching:
 
         prev_r = self.r[-1]
         assert g.shape == prev_r.shape, "Grad vector shape does not match regret shape"
-        self.r.append(prev_r + g - np.dot(g, self.x[-1]) @ np.ones_like(prev_r))
+
+        print(f"{self.x=}, {prev_r=}")
+        self.r.append(prev_r + g - np.dot(g, self.x[-1]) * np.ones_like(prev_r))
 
 class CFR:
     def __init__(self, game: Game, player: str):
@@ -87,21 +90,56 @@ class CFR:
         
         # Step 2: construct sequence-form strat
         # Lowkey can use game method for this but idk
-        self.x = {seq: 0 for seq in self.Sigma}
         
         @lru_cache(None)
-        def recurse(j: str):
+        def x(seq: tuple):
+            """
+            This is just for computing sequence-form strat.
+            """
+            j, a = seq
             for a in self.J[j]["actions"]:
                 p_j = self.game.par_seq[(j, a)]
                 if p_j is None:
-                    self.x[(j, a)] = self.b[j][a]
+                    return self.b[j][a]
                 else:
-                    self.x[(j, a)] = self.x[p_j] * self.b[j][a]
+                    return x(p_j) * self.b[j][a]
 
-        for j in self.J:
-            recurse(j)
+        self.x = {seq: x(seq) for seq in self.Sigma}
         
         return self.x
+    
+    def observe_util(self, g: dict):
+        """
+        g is a "gradient vector" dict that has a float for everything in self.Sigma
+        """
+        @lru_cache(None)
+        def V(v: str):
+            """
+            Some recursion stuff ?? idk it's specified by the pseudocode
+            """
+            if v is None:
+                return 0
+            
+            if v in self.J:
+                j = v
+                return sum([
+                    self.b[j][a] * (g[(j, a)] + V(child)) \
+                    for a, child in self.J[j]["children"].items()
+                ])
+            elif v in self.K:
+                k = v
+                return sum([V(child) for _, child in self.K[k]["children"].items()])
+            else:
+                # This is probably fine
+                return 0
+
+        # Local counterfactual utilities
+        for j in self.J:
+            gj = {}
+            for a, child in self.J[j]["children"].items():
+                gj[a] = g[(j, a)] + V(child)
+            
+            self.R[j].observe_utility(gj)
 
 
 if __name__ == "__main__":
@@ -111,3 +149,4 @@ if __name__ == "__main__":
     cfr = CFR(game, "1")
 
     pprint(cfr.next_strategy())
+    cfr.observe_util({ seq: 0 for seq in cfr.game.all_seqs["1"] })

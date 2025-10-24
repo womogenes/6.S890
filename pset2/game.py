@@ -2,6 +2,7 @@ import numpy as np
 from pprint import pprint
 from collections import defaultdict
 from functools import lru_cache
+import re
 
 class Game:
     def __init__(self, game_file: str):
@@ -446,6 +447,57 @@ class Game:
 
                 tree[pre_pre_parts]["signals"].append(last_sig)
                 tree[pre_pre_parts]["children"][last_sig] = pre_parts
+
+        # We should include terminal nodes here
+        # They are probably important to fill in action space
+        # Yes, use regex because we are lazy
+        for terminal_hist, terminal_node in self.nodes.items():
+            if terminal_node["type"] != "terminal":
+                continue
+
+            parts = terminal_hist.strip("/").split("/")
+            pre_parts = join_parts(parts[:-1])
+            
+            final_player, final_action = parts[-1].split(":")
+            new_term_nodes = {}
+            terminal_hist_in_tree = None
+
+            for tree_hist, tree_node in tree.items():
+                # Does this match a decision node?
+                hist_re = tree_hist.replace("?", ".")
+
+                if not re.fullmatch(hist_re, pre_parts):
+                    continue
+
+                if tree_node["type"] == "decision":
+                    assert final_player[1:] == player
+                    if final_action in tree_node["children"]:
+                        continue
+                    tree_node["actions"].append(final_action)
+                    tree_node["children"][final_action] = None
+
+                else:
+                    assert tree_node["type"] == "obs"
+                    if parts[-1] in tree_node["children"]:
+                        continue
+                    tree_node["signals"].append(parts[-1])
+                    tree_node["children"][parts[-1]] = None
+
+                # Add to tree as observation node for completeness
+                terminal_hist_in_tree = f"{tree_hist}{parts[-1]}/"\
+
+            else:
+                # In this case, the terminal is the final value and not in an infoset
+                #   simply because the game has ended at this point.
+                terminal_hist_in_tree = None
+            
+            # Insert terminal node info
+            if terminal_hist_in_tree is not None:
+                tree[terminal_hist_in_tree] = {
+                    "type": "obs",
+                    "signals": [],
+                    "children": {},
+                }
 
         return tree
 
