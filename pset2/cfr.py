@@ -29,6 +29,7 @@ import numpy as np
 from functools import lru_cache
 
 from pprint import pprint
+import matplotlib.pyplot as plt
 
 from game import Game
 
@@ -81,7 +82,7 @@ class CFR:
         self.game = game
         self.player = player
 
-    def next_strategy(self):
+    def next_strategy(self, as_vec=False):
         self.b = {}
 
         # Step 1: get local strategies per decision node
@@ -111,13 +112,20 @@ class CFR:
         self.x[None] = 1
 
         game.verify_seq_strat(self.player, self.x)
+
+        if as_vec:
+            return np.array([self.x[seq] for seq in self.Sigma])
         
         return self.x
     
-    def observe_util(self, g: dict):
+    def observe_util(self, g: dict, as_vec=False):
         """
         g is a "gradient vector" dict that has a float for everything in self.Sigma
         """
+        if as_vec:
+            # Convert vector to dict
+            g = {seq: g[idx] for idx, seq in enumerate(self.Sigma)}
+
         @lru_cache(None)
         def V(v: str):
             """
@@ -156,3 +164,35 @@ if __name__ == "__main__":
 
     cfr.next_strategy()
     cfr.observe_util({ seq: 0 for seq in cfr.game.all_seqs["1"] })
+
+    # PROBLEM 5.2: CFR against uniform strategy
+    MAX_T = 10
+
+    n1 = len(game.all_seqs["1"])
+    n2 = len(game.all_seqs["2"])
+    x_hist = np.zeros((MAX_T, n1))
+    y_hist = np.zeros((MAX_T, n2))
+
+    p1_util_hist = [None] * MAX_T
+
+    # Fix p2 to be uniform strat
+    y = game.seq2vec("2", game.behav_to_seq("2", game.gen_uniform_behav_strat("2")))
+    cfr1_uniform = CFR(game, "1")
+
+    for t in range(MAX_T):
+        x = cfr1_uniform.next_strategy(as_vec=True)
+        x_hist[t] = x
+        # y is static here
+        y_hist[t] = y
+
+        g = game.M @ y
+        cfr1_uniform.observe_util(g, as_vec=True)
+
+        x_avg = np.mean(x_hist[:t+1], axis=0)
+        y_avg = np.mean(y_hist[:t+1], axis=0)
+
+        p1_util_hist[t] = x_avg @ game.M @ y_avg
+        print(p1_util_hist)
+    
+    plt.plot(p1_util_hist)
+    plt.show()
