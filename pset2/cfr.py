@@ -256,9 +256,9 @@ def part_53():
         axs[0].set_title(f"P1 util {game_type}")
         axs[1].plot(nash_gap_hist)
         axs[1].set_title(f"Nash gap {game_type}")
-        
-        plt.show()
+
+        plt.savefig(f"./fig/fig_5.3_{game_type}.png")
 
 if __name__ == "__main__":
-    # part_52()
+    part_52()
     part_53()
