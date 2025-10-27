@@ -627,4 +627,3 @@ if __name__ == "__main__":
 
         u2_seq_vec = game.seq2vec("2", u2_seq)
         br1_seq_vec = game.seq2vec("1", br1_seq)
-        print(u2_seq_vec.shape, br1_seq_vec.shape)

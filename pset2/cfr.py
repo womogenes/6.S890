@@ -202,9 +202,11 @@ def part_52():
         br1_util, br1 = game.get_best_response("1", u2_behav)
         print(f"  Expected: {br1_util:.5f}")
 
+        plt.cla()
+        plt.clf()
         plt.plot(p1_util_hist)
         plt.title(f"P1's exp. util. using CFR vs. uniform in {game_type}")
-        plt.show()
+        plt.savefig(f"./fig/fig_5.2_{game_type}.png")
 
 def part_53():
     """
